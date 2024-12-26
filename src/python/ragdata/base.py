@@ -77,8 +77,10 @@ class Index:
         # Index stream
         embeddings.index(tqdm(self.stream(queue), total=total))
 
-        # Wait for process to finish
+        # Wait for process to finish and close
         process.join()
+        process.close()
+        queue.close()
 
         # Save index
         embeddings.save(args.output)

@@ -121,9 +121,14 @@ class Views:
         # Main processing loop
         pages = self.process(processes, outputs)
 
-        # Wait for processes to terminate
+        # Wait for processes to finish and close
         for process in processes:
             process.join()
+            process.close()
+
+        # Close queues
+        inputs.close()
+        outputs.close()
 
         df = pd.DataFrame(pages.items(), columns=["title", "views"])
 
