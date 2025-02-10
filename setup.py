@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="ragdata",
-    version="0.1.0",
+    version="0.2.0",
     author="NeuML",
     description="Build knowledge bases for RAG",
     long_description=DESCRIPTION,
