@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="ragdata",
-    version="0.2.0",
+    version="0.3.0",
     author="NeuML",
     description="Build knowledge bases for RAG",
     long_description=DESCRIPTION,
@@ -22,13 +22,13 @@ setup(
     packages=find_packages(where="src/python"),
     package_dir={"": "src/python"},
     keywords="search embedding machine-learning nlp",
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     install_requires=[
         "datasets>=3.0.1",
         "nltk>=3.5",
         "pandas>=1.3.5",
         "tqdm>=4.48.0",
-        "txtai>=8.1.0",
+        "txtai>=8.5.0",
     ],
     classifiers=[
         "License :: OSI Approved :: Apache Software License",
