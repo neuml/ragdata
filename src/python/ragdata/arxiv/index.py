@@ -28,7 +28,7 @@ class Reader(ReaderBase):
         """
 
         # Load the raw dataset
-        arxiv = load_dataset("arxiv_dataset", data_dir=args.data, verification_mode=VerificationMode.NO_CHECKS, split="train")
+        arxiv = load_dataset("arxiv_dataset", data_dir=args.data, verification_mode=VerificationMode.NO_CHECKS, split="train", trust_remote_code=True)
 
         # Put estimated data size
         outputs.put(len(arxiv) * 2)
