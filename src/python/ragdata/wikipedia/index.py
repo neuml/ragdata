@@ -3,16 +3,15 @@ Index module
 """
 
 import argparse
+import csv
 import logging
-import re
 import sqlite3
-
-from nltk import sent_tokenize
-from datasets import load_dataset
 
 from ..base import Index as IndexBase
 from ..base import Reader as ReaderBase
 from ..base import COMPLETE, BATCH, ENCODEBATCH
+
+from .articles import Articles
 
 
 class Reader(ReaderBase):
@@ -29,51 +28,31 @@ class Reader(ReaderBase):
             args: command line args
         """
 
-        # Load the raw dataset
-        wiki = load_dataset(args.dataset, split="train")
+        # Streams Wikipedia titles and abstracts
+        wiki = Articles(args.dataset)
 
         # Get percentile rankings
         rank = self.rankings(args.pageviews)
 
-        # Put estimated data size
-        outputs.put(len(wiki) * 2)
+        # Domain labels
+        labels = self.labels(args.labels)
 
-        # Titles and abstract prefixes to skip
-        skiptitles = ["List of ", "Timeline of ", "Timelines "]
-        skipabstracts = ["Events ", "The following events ", "REDIRECT "]
+        # Put estimated data size
+        outputs.put(len(wiki))
 
         # Batch of rows
         batch = []
 
-        for row in wiki:
-            # Article title
-            title = row["title"]
+        for title, abstract in wiki():
+            score = self.percentile(rank, title)
 
-            # First text section is considered abstract
-            abstract = self.abstract(row["text"])
-
-            # Accept article using following rules
-            # - title does not contain 'disambiguation' and does not start with skip title prefixes
-            # - abstract is not empty and does not end with ':'  and does not start with skip abstract prefixes
-            # - lede does not contain 'can refer to' or 'may refer to'
-            if (
-                "disambiguation" not in title
-                and not any(title.startswith(p) for p in skiptitles)
-                and abstract and not abstract.endswith(":")
-                and not any(abstract.startswith(p) for p in skipabstracts)
-            ):
-                # Split into sentences
-                lede = sent_tokenize(abstract)[0]
-
-                # Skip if lede is a list of references
-                if lede.strip() and "can refer to" not in lede and "may refer to" not in lede:
-                    score = self.percentile(rank, title)
-
-                    # Index article text
-                    batch = self.add(batch, (title, abstract), outputs)
-
-                    # Index additional metadata
-                    batch = self.add(batch, (title, {"percentile": score}), outputs)
+            # Index article
+            batch = self.add(batch, {
+                "id": title,
+                "text": abstract,
+                "percentile": score,
+                "domain": labels[title]
+            }, outputs)
 
         # Final batch
         if batch:
@@ -107,40 +86,6 @@ class Reader(ReaderBase):
 
         return rank
 
-    def abstract(self, text):
-        """
-        Builds an abstract from article text. The first paragraph with text is used as the abstract.
-
-        Args:
-            text: article text
-
-        Returns:
-            abstract text
-        """
-
-        # Detect and remove formatting boxes
-        formatbox = ("{", "}", "|", "[", "]", "!")
-        if text.strip().startswith(formatbox):
-            # Remove info boxes
-            text = re.sub(r"\{[{|\n].*[}|\n]\}", "", text, flags=re.DOTALL)
-
-            # Remove attachment links
-            text = re.sub(r"\[.*\]", "", text, flags=re.DOTALL)
-
-            # Filter lines that start with a formatting box character - handles partial formatting boxes
-            text = "\n".join(x for x in text.split("\n") if not x.strip().startswith(formatbox))
-
-            # Filter empty and low token sections parsed
-            text = "\n\n".join(x for x in text.split("\n\n") if x.strip() and len(x.split()) >= 5)
-
-        # The first/lede section in the article is considered the abstract
-        sections = text.split("\n\n")
-        abstract = sections[0].strip() if sections else ""
-
-        # Cleanup empty parens
-        abstract = re.sub(r" \(\s*\)", "", abstract)
-        return abstract
-
     def percentile(self, rank, title):
         """
         Looks up the percentile for a title.
@@ -154,6 +99,20 @@ class Reader(ReaderBase):
         """
 
         return rank.get(title.lower().replace(" ", "_"), 0)
+
+    def labels(self, path):
+        """
+        Reads a labels csv as a dictionary.
+
+        Args:
+            path: path to csv file
+        """
+
+        with open(path, mode="r", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+
+            # Return dict of {id: label}
+            return {row["id"]: row["label"] for row in reader}
 
 
 class Index(IndexBase):
@@ -178,6 +137,11 @@ class Index(IndexBase):
             "encodebatch": ENCODEBATCH,
             "faiss": {"quantize": True, "sample": 0.05},
             "content": True,
+            "columns": {"store": ["percentile", "domain"]},
+            "expressions": [
+                {"name": "percentile", "index": True},
+                {"name": "domain", "index": True},
+            ]
         }
 
         # Create Reader instance
@@ -192,6 +156,7 @@ if __name__ == "__main__":
     # Command line parser
     parser = argparse.ArgumentParser(description="Wikipedia Index")
     parser.add_argument("-d", "--dataset", help="input dataset", metavar="DATASET", required=True)
+    parser.add_argument("-l", "--labels", help="path to labels csv", metavar="LABELS", required=True)
     parser.add_argument("-o", "--output", help="path to output directory", metavar="OUTPUT", required=True)
     parser.add_argument("-v", "--pageviews", help="path to pageviews database", metavar="PAGEVIEWS", required=True)
 
