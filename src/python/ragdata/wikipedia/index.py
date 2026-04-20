@@ -44,13 +44,11 @@ class Reader(ReaderBase):
         batch = []
 
         for title, abstract in wiki():
-            score = self.percentile(rank, title)
-
             # Index article
             batch = self.add(batch, {
                 "id": title,
                 "text": abstract,
-                "percentile": score,
+                "percentile": self.percentile(rank, title),
                 "domain": labels[title]
             }, outputs)
 
